@@ -1,17 +1,18 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Platform } from 'react-native';
+import React, { useState, useCallback, useMemo } from 'react';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Platform, Alert } from 'react-native';
 import { RadioButton } from 'react-native-paper';
 import * as Print from 'expo-print';
 import { shareAsync } from 'expo-sharing';
 import { Stack, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CircleAlert as AlertCircle, ArrowLeft, ArrowRight, FileText, User } from 'lucide-react-native';
+import { useScalesStore } from '@/store/scales';
 
 // Importar las preguntas desde un archivo separado
 import { questions } from '@/data/barthel';
 
-export default function BarthelScale() {
-  const router = useRouter();
+// Hook personalizado para manejar la evaluación de Barthel
+function useBarthelAssessment() {
   const [patientData, setPatientData] = useState({
     name: '',
     age: '',
@@ -21,20 +22,26 @@ export default function BarthelScale() {
   const [currentStep, setCurrentStep] = useState<'form' | 'questions' | 'results'>('form');
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
+  const addRecentlyViewed = useScalesStore(state => state.addRecentlyViewed);
 
-  const handlePatientDataChange = (field: keyof typeof patientData) => (value: string) => {
+  const handlePatientDataChange = useCallback((field: keyof typeof patientData) => (value: string) => {
     setPatientData(prev => ({ ...prev, [field]: value }));
-  };
+  }, []);
 
-  const handleAnswer = (questionId: string, value: number) => {
+  const handleAnswer = useCallback((questionId: string, value: number) => {
     setAnswers(prev => ({ ...prev, [questionId]: value }));
-  };
+  }, []);
 
-  const calculateTotal = () => {
-    return Object.values(answers).reduce((sum, value) => sum + value, 0);
-  };
+  const calculateTotal = useCallback(() => {
+    if (Object.keys(answers).length === 0) return 0;
+    return Object.values(answers).reduce((sum, value) => {
+      // Validación para asegurar que value es un número
+      const numValue = typeof value === 'number' ? value : parseInt(value, 10);
+      return isNaN(numValue) ? sum : sum + numValue;
+    }, 0);
+  }, [answers]);
 
-  const getInterpretation = (total: number) => {
+  const getInterpretation = useCallback((total: number) => {
     if (total < 45)
       return {
         result: 'Incapacidad funcional Severa',
@@ -64,48 +71,70 @@ export default function BarthelScale() {
       explanation: 'El paciente puede realizar todas las actividades básicas sin asistencia.',
       color: '#15803d',
     };
-  };
+  }, []);
 
-  const validateForm = () => {
+  const validateForm = useCallback(() => {
     return Object.values(patientData).every(value => value.trim() !== '');
-  };
+  }, [patientData]);
 
-  const nextQuestion = () => {
+  const nextQuestion = useCallback(() => {
     if (currentQuestion < questions.length - 1) {
       setCurrentQuestion(currentQuestion + 1);
     } else {
       setCurrentStep('results');
+      addRecentlyViewed('barthel');
     }
-  };
+  }, [currentQuestion, addRecentlyViewed]);
 
-  const prevQuestion = () => {
+  const prevQuestion = useCallback(() => {
     if (currentQuestion > 0) {
       setCurrentQuestion(currentQuestion - 1);
     }
+  }, [currentQuestion]);
+
+  const resetAssessment = useCallback(() => {
+    setPatientData({ name: '', age: '', gender: '', doctorName: '' });
+    setAnswers({});
+    setCurrentQuestion(0);
+    setCurrentStep('form');
+  }, []);
+
+  return {
+    patientData,
+    currentStep,
+    currentQuestion,
+    answers,
+    handlePatientDataChange,
+    handleAnswer,
+    calculateTotal,
+    getInterpretation,
+    validateForm,
+    nextQuestion,
+    prevQuestion,
+    setCurrentStep,
+    resetAssessment
   };
+}
 
-  const handleExport = async () => {
-    if (Platform.OS === 'web') {
-      // Implementar alternativa web para exportar resultados
-      return;
-    }
-    const total = calculateTotal();
-    const interpretation = getInterpretation(total);
-    const htmlContent = generatePDFContent(total, interpretation);
+export default function BarthelScale() {
+  const router = useRouter();
+  const {
+    patientData,
+    currentStep,
+    currentQuestion,
+    answers,
+    handlePatientDataChange,
+    handleAnswer,
+    calculateTotal,
+    getInterpretation,
+    validateForm,
+    nextQuestion,
+    prevQuestion,
+    setCurrentStep,
+    resetAssessment
+  } = useBarthelAssessment();
 
-    try {
-      const { uri } = await Print.printToFileAsync({ html: htmlContent });
-      await shareAsync(uri, {
-        mimeType: 'application/pdf',
-        dialogTitle: 'Exportar Resultados',
-        UTI: 'com.adobe.pdf',
-      });
-    } catch (error) {
-      console.error('Error al exportar PDF:', error);
-    }
-  };
-
-  const generatePDFContent = (total: number, interpretation: ReturnType<typeof getInterpretation>) => {
+  const generatePDFContent = useCallback((total: number, interpretation: ReturnType<typeof getInterpretation>) => {
     let detailHTML = '';
     questions.forEach(q => {
       const answer = answers[q.id];
@@ -165,14 +194,108 @@ export default function BarthelScale() {
         </body>
       </html>
     `;
-  };
+  }, [answers, patientData]);
 
-  const resetQuiz = () => {
-    setPatientData({ name: '', age: '', gender: '', doctorName: '' });
-    setAnswers({});
-    setCurrentQuestion(0);
-    setCurrentStep('form');
-  };
+  const handleExport = useCallback(async () => {
+    if (Platform.OS === 'web') {
+      Alert.alert('Exportación Web', 'La exportación a PDF no está disponible en la versión web por el momento.');
+      return;
+    }
+    
+    try {
+      const total = calculateTotal();
+      const interpretation = getInterpretation(total);
+      const htmlContent = generatePDFContent(total, interpretation);
+
+      const { uri } = await Print.printToFileAsync({ html: htmlContent });
+      await shareAsync(uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: 'Exportar Resultados',
+        UTI: 'com.adobe.pdf',
+      });
+    } catch (error) {
+      console.error('Error al exportar PDF:', error);
+      Alert.alert(
+        'Error de Exportación',
+        'Ha ocurrido un error al generar el PDF. Por favor intente nuevamente.'
+      );
+    }
+  }, [calculateTotal, getInterpretation, generatePDFContent]);
+
+  // Memoizar el componente de resultados para evitar renderizados innecesarios
+  const ResultsContent = useMemo(() => {
+    const total = calculateTotal();
+    const interpretation = getInterpretation(total);
+    
+    return (
+      <View style={styles.resultsContainer}>
+        <Text style={styles.title}>Resultados Escala de Barthel</Text>
+        <View style={styles.resultSection}>
+          <Text style={styles.sectionTitle}>Datos del Paciente</Text>
+          <Text style={styles.resultText}>
+            <Text style={styles.bold}>Nombre:</Text> {patientData.name}
+          </Text>
+          <Text style={styles.resultText}>
+            <Text style={styles.bold}>Edad:</Text> {patientData.age}
+          </Text>
+          <Text style={styles.resultText}>
+            <Text style={styles.bold}>Género:</Text> {patientData.gender}
+          </Text>
+          <Text style={styles.resultText}>
+            <Text style={styles.bold}>Médico:</Text> {patientData.doctorName}
+          </Text>
+        </View>
+        <View style={styles.resultSection}>
+          <Text style={styles.sectionTitle}>Puntuación</Text>
+          <Text style={styles.resultText}>
+            <Text style={styles.bold}>Total:</Text> {total}/100
+          </Text>
+          <Text style={[styles.resultText, { color: interpretation.color }]}>
+            {interpretation.result}
+          </Text>
+          <Text style={styles.resultText}>{interpretation.explanation}</Text>
+        </View>
+        <View style={styles.resultSection}>
+          <Text style={styles.sectionTitle}>Detalle de Respuestas</Text>
+          {questions.map(q => {
+            const answer = answers[q.id];
+            if (answer !== undefined) {
+              const selectedOption = q.options.find(opt => opt.value === answer);
+              return (
+                <View key={q.id} style={styles.detailItem}>
+                  <Text style={styles.bold}>{q.question}</Text>
+                  {selectedOption && (
+                    <Text>
+                      {selectedOption.label} ({selectedOption.value} puntos)
+                    </Text>
+                  )}
+                </View>
+              );
+            }
+            return null;
+          })}
+        </View>
+        <TouchableOpacity 
+          style={styles.button} 
+          onPress={handleExport}
+          accessible={true}
+          accessibilityLabel="Exportar resultados como PDF"
+          accessibilityRole="button"
+        >
+          <Text style={styles.buttonText}>Imprimir/Exportar PDF</Text>
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.button, { backgroundColor: '#ef4444' }]} 
+          onPress={resetAssessment}
+          accessible={true}
+          accessibilityLabel="Reiniciar cuestionario"
+          accessibilityRole="button"
+        >
+          <Text style={styles.buttonText}>Reiniciar Cuestionario</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }, [answers, calculateTotal, getInterpretation, handleExport, patientData, resetAssessment]);
 
   return (
     <>
@@ -181,7 +304,12 @@ export default function BarthelScale() {
           title: 'Escala de Barthel',
           headerShown: true,
           headerLeft: () => (
-            <TouchableOpacity onPress={() => router.back()}>
+            <TouchableOpacity 
+              onPress={() => router.back()}
+              accessible={true}
+              accessibilityLabel="Volver atrás"
+              accessibilityRole="button"
+            >
               <ArrowLeft color="#000" size={24} />
             </TouchableOpacity>
           ),
@@ -199,6 +327,7 @@ export default function BarthelScale() {
                   placeholder="Nombre del Paciente"
                   value={patientData.name}
                   onChangeText={handlePatientDataChange('name')}
+                  accessibilityLabel="Nombre del paciente"
                 />
               </View>
               <View style={styles.inputGroup}>
@@ -209,13 +338,14 @@ export default function BarthelScale() {
                   keyboardType="numeric"
                   value={patientData.age}
                   onChangeText={handlePatientDataChange('age')}
+                  accessibilityLabel="Edad del paciente"
                 />
               </View>
               {/* Campo para seleccionar el género */}
               <View style={[styles.inputGroup, { flexDirection: 'column', alignItems: 'flex-start' }]}>
                 <Text style={{ marginBottom: 8, fontSize: 16, color: '#0f172a' }}>Género:</Text>
                 <RadioButton.Group
-                  onValueChange={(value) => handlePatientDataChange('gender')(value)}
+                  onValueChange={handlePatientDataChange('gender')}
                   value={patientData.gender}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -235,12 +365,17 @@ export default function BarthelScale() {
                   placeholder="Nombre del Médico/Evaluador"
                   value={patientData.doctorName}
                   onChangeText={handlePatientDataChange('doctorName')}
+                  accessibilityLabel="Nombre del médico o evaluador"
                 />
               </View>
               <TouchableOpacity
                 style={[styles.button, !validateForm() && styles.buttonDisabled]}
                 disabled={!validateForm()}
                 onPress={() => setCurrentStep('questions')}
+                accessible={true}
+                accessibilityLabel="Comenzar evaluación"
+                accessibilityRole="button"
+                accessibilityState={{ disabled: !validateForm() }}
               >
                 <Text style={styles.buttonText}>Comenzar Evaluación</Text>
               </TouchableOpacity>
@@ -276,12 +411,24 @@ export default function BarthelScale() {
                 </RadioButton.Group>
                 <View style={styles.navigation}>
                   {currentQuestion > 0 && (
-                    <TouchableOpacity style={styles.navButton} onPress={prevQuestion}>
+                    <TouchableOpacity 
+                      style={styles.navButton} 
+                      onPress={prevQuestion}
+                      accessible={true}
+                      accessibilityLabel="Pregunta anterior"
+                      accessibilityRole="button"
+                    >
                       <ArrowLeft color="#fff" size={20} />
                       <Text style={styles.navButtonText}>Anterior</Text>
                     </TouchableOpacity>
                   )}
-                  <TouchableOpacity style={styles.navButton} onPress={nextQuestion}>
+                  <TouchableOpacity 
+                    style={styles.navButton} 
+                    onPress={nextQuestion}
+                    accessible={true}
+                    accessibilityLabel={currentQuestion === questions.length - 1 ? "Finalizar evaluación" : "Siguiente pregunta"}
+                    accessibilityRole="button"
+                  >
                     <Text style={styles.navButtonText}>
                       {currentQuestion === questions.length - 1 ? 'Finalizar' : 'Siguiente'}
                     </Text>
@@ -298,67 +445,7 @@ export default function BarthelScale() {
 
         {currentStep === 'results' && (
           <ScrollView contentContainerStyle={styles.content}>
-            <View style={styles.resultsContainer}>
-              <Text style={styles.title}>Resultados Escala de Barthel</Text>
-              <View style={styles.resultSection}>
-                <Text style={styles.sectionTitle}>Datos del Paciente</Text>
-                <Text style={styles.resultText}>
-                  <Text style={styles.bold}>Nombre:</Text> {patientData.name}
-                </Text>
-                <Text style={styles.resultText}>
-                  <Text style={styles.bold}>Edad:</Text> {patientData.age}
-                </Text>
-                <Text style={styles.resultText}>
-                  <Text style={styles.bold}>Género:</Text> {patientData.gender}
-                </Text>
-                <Text style={styles.resultText}>
-                  <Text style={styles.bold}>Médico:</Text> {patientData.doctorName}
-                </Text>
-              </View>
-              <View style={styles.resultSection}>
-                <Text style={styles.sectionTitle}>Puntuación</Text>
-                <Text style={styles.resultText}>
-                  <Text style={styles.bold}>Total:</Text> {calculateTotal()}/100
-                </Text>
-                {(() => {
-                  const interpretation = getInterpretation(calculateTotal());
-                  return (
-                    <>
-                      <Text style={[styles.resultText, { color: interpretation.color }]}>
-                        {interpretation.result}
-                      </Text>
-                      <Text style={styles.resultText}>{interpretation.explanation}</Text>
-                    </>
-                  );
-                })()}
-              </View>
-              <View style={styles.resultSection}>
-                <Text style={styles.sectionTitle}>Detalle de Respuestas</Text>
-                {questions.map(q => {
-                  const answer = answers[q.id];
-                  if (answer !== undefined) {
-                    const selectedOption = q.options.find(opt => opt.value === answer);
-                    return (
-                      <View key={q.id} style={styles.detailItem}>
-                        <Text style={styles.bold}>{q.question}</Text>
-                        {selectedOption && (
-                          <Text>
-                            {selectedOption.label} ({selectedOption.value} puntos)
-                          </Text>
-                        )}
-                      </View>
-                    );
-                  }
-                  return null;
-                })}
-              </View>
-              <TouchableOpacity style={styles.button} onPress={handleExport}>
-                <Text style={styles.buttonText}>Imprimir/Exportar PDF</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.button, { backgroundColor: '#ef4444' }]} onPress={resetQuiz}>
-                <Text style={styles.buttonText}>Reiniciar Cuestionario</Text>
-              </TouchableOpacity>
-            </View>
+            {ResultsContent}
           </ScrollView>
         )}
       </SafeAreaView>
@@ -513,5 +600,3 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 });
-
-export default BarthelScale;

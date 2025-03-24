@@ -1,6 +1,6 @@
-import React, { useCallback, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, useWindowDimensions, Platform } from 'react-native';
-import { BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import React, { useCallback, useMemo, useRef, memo } from 'react';
+import { View, Text, StyleSheet, Pressable, useWindowDimensions, Platform, FlatList } from 'react-native';
+import { BottomSheetModal, BottomSheetScrollView, BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import { router } from 'expo-router';
 import { X, ChevronRight, ListStart, Brain, Activity, Heart, Stethoscope, Baby } from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -10,12 +10,21 @@ interface MenuProps {
   onClose: () => void;
 }
 
-const CATEGORIES = [
+interface Category {
+  id: string;
+  title: string;
+  description: string;
+  route: string;
+  icon: React.ComponentType<{ size: number; color: string }>;
+  color: string;
+}
+
+const CATEGORIES: Category[] = [
   {
     id: 'alphabetical',
     title: 'Escalas por Nombre',
     description: 'Listado completo ordenado alfabéticamente',
-    route: '/scales/alphabetical',
+    route: '/scales/alfabetico',
     icon: ListStart,
     color: '#0891b2'
   },
@@ -23,7 +32,7 @@ const CATEGORIES = [
     id: 'functional',
     title: 'Escalas Funcionales',
     description: 'Evaluación de capacidades y actividades diarias',
-    route: '/scales/functional',
+    route: '/scales/funcional',
     icon: Activity,
     color: '#0d9488'
   },
@@ -61,6 +70,39 @@ const CATEGORIES = [
   }
 ];
 
+// Componente memoizado para cada elemento de categoría
+const CategoryItem = memo(({ category, index, onPress }: { 
+  category: Category; 
+  index: number; 
+  onPress: (route: string) => void;
+}) => (
+  <Animated.View
+    key={category.id}
+    entering={FadeInDown.delay(index * 100)}
+    style={styles.categoryContainer}
+  >
+    <Pressable
+      style={styles.categoryButton}
+      onPress={() => onPress(category.route)}
+      accessible={true}
+      accessibilityLabel={category.title}
+      accessibilityHint={category.description}
+      accessibilityRole="button"
+    >
+      <View style={[styles.iconContainer, { backgroundColor: `${category.color}20` }]}>
+        <category.icon size={24} color={category.color} />
+      </View>
+      <View style={styles.categoryInfo}>
+        <Text style={styles.categoryTitle}>{category.title}</Text>
+        <Text style={styles.categoryDescription}>{category.description}</Text>
+      </View>
+      <ChevronRight size={20} color="#64748b" />
+    </Pressable>
+  </Animated.View>
+));
+
+CategoryItem.displayName = 'CategoryItem';
+
 export function Menu({ visible, onClose }: MenuProps) {
   const { height } = useWindowDimensions();
   const bottomSheetRef = useRef<BottomSheetModal>(null);
@@ -71,6 +113,7 @@ export function Menu({ visible, onClose }: MenuProps) {
     router.push(route);
   }, [onClose]);
 
+  // Efecto para presentar/descartar el bottomSheet
   React.useEffect(() => {
     if (Platform.OS !== 'web' && visible) {
       bottomSheetRef.current?.present();
@@ -79,6 +122,14 @@ export function Menu({ visible, onClose }: MenuProps) {
     }
   }, [visible]);
 
+  // Renderizador optimizado para FlatList
+  const renderItem = useCallback(({ item, index }: { item: Category; index: number }) => (
+    <CategoryItem category={item} index={index} onPress={handleCategoryPress} />
+  ), [handleCategoryPress]);
+
+  const keyExtractor = useCallback((item: Category) => item.id, []);
+
+  // Renderizado para web
   if (Platform.OS === 'web') {
     if (!visible) return null;
 
@@ -87,39 +138,29 @@ export function Menu({ visible, onClose }: MenuProps) {
         <View style={styles.webModal}>
           <View style={styles.header}>
             <Text style={styles.title}>Categorías de Escalas</Text>
-            <Pressable onPress={onClose} style={styles.closeButton}>
+            <Pressable 
+              onPress={onClose} 
+              style={styles.closeButton}
+              accessible={true}
+              accessibilityLabel="Cerrar"
+              accessibilityRole="button"
+            >
               <X size={24} color="#64748b" />
             </Pressable>
           </View>
 
-          <View style={styles.content}>
-            {CATEGORIES.map((category, index) => (
-              <Animated.View
-                key={category.id}
-                entering={FadeInDown.delay(index * 100)}
-                style={styles.categoryContainer}
-              >
-                <Pressable
-                  style={styles.categoryButton}
-                  onPress={() => handleCategoryPress(category.route)}
-                >
-                  <View style={[styles.iconContainer, { backgroundColor: `${category.color}20` }]}>
-                    <category.icon size={24} color={category.color} />
-                  </View>
-                  <View style={styles.categoryInfo}>
-                    <Text style={styles.categoryTitle}>{category.title}</Text>
-                    <Text style={styles.categoryDescription}>{category.description}</Text>
-                  </View>
-                  <ChevronRight size={20} color="#64748b" />
-                </Pressable>
-              </Animated.View>
-            ))}
-          </View>
+          <FlatList
+            data={CATEGORIES}
+            renderItem={renderItem}
+            keyExtractor={keyExtractor}
+            contentContainerStyle={styles.content}
+          />
         </View>
       </View>
     );
   }
 
+  // Renderizado para dispositivos móviles
   return (
     <BottomSheetModal
       ref={bottomSheetRef}
@@ -127,37 +168,27 @@ export function Menu({ visible, onClose }: MenuProps) {
       onDismiss={onClose}
       backgroundStyle={styles.modalBackground}
       handleIndicatorStyle={styles.indicator}
+      enablePanDownToClose={true}
     >
       <View style={styles.header}>
         <Text style={styles.title}>Categorías de Escalas</Text>
-        <Pressable onPress={onClose} style={styles.closeButton}>
+        <Pressable 
+          onPress={onClose} 
+          style={styles.closeButton}
+          accessible={true}
+          accessibilityLabel="Cerrar"
+          accessibilityRole="button"
+        >
           <X size={24} color="#64748b" />
         </Pressable>
       </View>
 
-      <BottomSheetScrollView contentContainerStyle={styles.content}>
-        {CATEGORIES.map((category, index) => (
-          <Animated.View
-            key={category.id}
-            entering={FadeInDown.delay(index * 100)}
-            style={styles.categoryContainer}
-          >
-            <Pressable
-              style={styles.categoryButton}
-              onPress={() => handleCategoryPress(category.route)}
-            >
-              <View style={[styles.iconContainer, { backgroundColor: `${category.color}20` }]}>
-                <category.icon size={24} color={category.color} />
-              </View>
-              <View style={styles.categoryInfo}>
-                <Text style={styles.categoryTitle}>{category.title}</Text>
-                <Text style={styles.categoryDescription}>{category.description}</Text>
-              </View>
-              <ChevronRight size={20} color="#64748b" />
-            </Pressable>
-          </Animated.View>
-        ))}
-      </BottomSheetScrollView>
+      <BottomSheetFlatList
+        data={CATEGORIES}
+        renderItem={renderItem}
+        keyExtractor={keyExtractor}
+        contentContainerStyle={styles.content}
+      />
     </BottomSheetModal>
   );
 }

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform } from 'react-native';
+import React, { useState, useCallback, memo } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { SearchWidget } from '@/components/SearchWidget';
@@ -123,13 +123,40 @@ const BODY_SEGMENTS = {
   },
 };
 
+const ImageWithFallback = ({ uri, style, ...props }) => {
+  const [hasError, setHasError] = useState(false);
+  return (
+    <Image
+      source={hasError ? { uri: 'https://images.unsplash.com/photo-1584516150909-c43483ee7932?w=800&auto=format&fit=crop&q=60' } : { uri }}
+      style={style}
+      onError={() => {
+        console.warn(`Failed to load image: ${uri}`);
+        setHasError(true);
+      }}
+      {...props}
+    />
+  );
+};
+
 export default function BodySegmentScalesScreen() {
   const [searchQuery, setSearchQuery] = useState('');
 
-  const ScaleCard = ({ scale }) => (
+  const handleSearch = useCallback((query: string) => {
+    setSearchQuery(query);
+  }, []);
+
+  const navigateToScale = useCallback((id: string) => {
+    router.push(`/scales/${id}`);
+  }, []);
+
+  const ScaleCard = memo(({ scale }) => (
     <TouchableOpacity
       style={styles.scaleCard}
-      onPress={() => router.push(`/scales/${scale.id}`)}
+      onPress={() => navigateToScale(scale.id)}
+      accessible={true}
+      accessibilityLabel={`Escala ${scale.name}`}
+      accessibilityHint={scale.description}
+      accessibilityRole="button"
     >
       <View style={styles.scaleContent}>
         <Text style={styles.scaleName}>{scale.name}</Text>
@@ -152,7 +179,54 @@ export default function BodySegmentScalesScreen() {
       </View>
       <ArrowRight size={20} color="#64748b" />
     </TouchableOpacity>
-  );
+  ));
+
+  const SubsectionComponent = memo(({ subsection, searchQuery }) => {
+    const filteredScales = subsection.scales.filter(scale =>
+      scale.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      scale.description.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    if (filteredScales.length === 0) return null;
+
+    return (
+      <View style={styles.subsection}>
+        <Text style={styles.subsectionTitle}>{subsection.name}</Text>
+        {filteredScales.map(scale => (
+          <ScaleCard key={scale.id} scale={scale} />
+        ))}
+      </View>
+    );
+  });
+
+  const SegmentComponent = memo(({ segment, searchKey, searchQuery }) => {
+    return (
+      <View key={searchKey} style={styles.segment}>
+        <View style={styles.segmentHeader}>
+          <ImageWithFallback
+            uri={segment.image}
+            style={styles.segmentImage}
+          />
+          <View style={styles.segmentOverlay}>
+            <Text style={styles.segmentTitle}>{segment.name}</Text>
+          </View>
+        </View>
+
+        {Object.entries(segment.subsections).map(([subKey, subsection]) => (
+          <SubsectionComponent 
+            key={subKey} 
+            subsection={subsection} 
+            searchQuery={searchQuery} 
+          />
+        ))}
+      </View>
+    );
+  });
+
+  const segmentsArray = Object.entries(BODY_SEGMENTS).map(([key, segment]) => ({
+    key,
+    segment
+  }));
 
   return (
     <>
@@ -164,47 +238,32 @@ export default function BodySegmentScalesScreen() {
       <SafeAreaView style={styles.container} edges={['bottom']}>
         <View style={styles.searchContainer}>
           <SearchWidget
-            onSearch={setSearchQuery}
+            onSearch={handleSearch}
             placeholder="Buscar por región corporal..."
           />
         </View>
 
-        <ScrollView style={styles.content}>
-          {Object.entries(BODY_SEGMENTS).map(([key, segment]) => (
-            <View key={key} style={styles.segment}>
-              <View style={styles.segmentHeader}>
-                <Image
-                  source={{ uri: segment.image }}
-                  style={styles.segmentImage}
-                />
-                <View style={styles.segmentOverlay}>
-                  <Text style={styles.segmentTitle}>{segment.name}</Text>
-                </View>
-              </View>
-
-              {Object.entries(segment.subsections).map(([subKey, subsection]) => (
-                <View key={subKey} style={styles.subsection}>
-                  <Text style={styles.subsectionTitle}>{subsection.name}</Text>
-                  
-                  {subsection.scales
-                    .filter(scale =>
-                      scale.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                      scale.description.toLowerCase().includes(searchQuery.toLowerCase())
-                    )
-                    .map(scale => (
-                      <ScaleCard key={scale.id} scale={scale} />
-                    ))}
-                </View>
-              ))}
+        <FlatList
+          data={segmentsArray}
+          keyExtractor={(item) => item.key}
+          renderItem={({ item }) => (
+            <SegmentComponent 
+              segment={item.segment} 
+              searchKey={item.key} 
+              searchQuery={searchQuery} 
+            />
+          )}
+          initialNumToRender={2}
+          maxToRenderPerBatch={1}
+          windowSize={3}
+          ListFooterComponent={() => (
+            <View style={styles.lastUpdate}>
+              <Text style={styles.lastUpdateText}>
+                Última actualización: {new Date().toLocaleDateString()}
+              </Text>
             </View>
-          ))}
-
-          <View style={styles.lastUpdate}>
-            <Text style={styles.lastUpdateText}>
-              Última actualización: {new Date().toLocaleDateString()}
-            </Text>
-          </View>
-        </ScrollView>
+          )}
+        />
       </SafeAreaView>
     </>
   );

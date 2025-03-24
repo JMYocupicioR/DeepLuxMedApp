@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, memo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
@@ -71,13 +71,42 @@ const FUNCTIONAL_SCALES = {
   },
 };
 
+// Componente ImageWithFallback para manejo de errores de imagen
+const ImageWithFallback = ({ uri, style, ...props }) => {
+  const [hasError, setHasError] = useState(false);
+  return (
+    <Image
+      source={hasError ? { uri: 'https://images.unsplash.com/photo-1584516150909-c43483ee7932?w=800&auto=format&fit=crop&q=60' } : { uri }}
+      style={style}
+      onError={() => {
+        console.warn(`Failed to load image: ${uri}`);
+        setHasError(true);
+      }}
+      {...props}
+    />
+  );
+};
+
 export default function FunctionalScalesScreen() {
   const [searchQuery, setSearchQuery] = useState('');
 
-  const ScaleCard = ({ scale }) => (
+  const handleSearch = useCallback((query: string) => {
+    setSearchQuery(query);
+  }, []);
+
+  const navigateToScale = useCallback((id: string) => {
+    router.push(`/scales/${id}`);
+  }, []);
+
+  // Componente ScaleCard memoizado
+  const ScaleCard = memo(({ scale }) => (
     <TouchableOpacity
       style={styles.scaleCard}
-      onPress={() => router.push(`/scales/${scale.id}`)}
+      onPress={() => navigateToScale(scale.id)}
+      accessible={true}
+      accessibilityLabel={`Escala ${scale.name}`}
+      accessibilityHint={scale.description}
+      accessibilityRole="button"
     >
       <View style={styles.scaleContent}>
         <Text style={styles.scaleName}>{scale.name}</Text>
@@ -94,7 +123,7 @@ export default function FunctionalScalesScreen() {
       </View>
       <ArrowRight size={20} color="#64748b" />
     </TouchableOpacity>
-  );
+  ));
 
   return (
     <>
@@ -107,7 +136,7 @@ export default function FunctionalScalesScreen() {
         <ScrollView style={styles.content}>
           <View style={styles.searchContainer}>
             <SearchWidget
-              onSearch={setSearchQuery}
+              onSearch={handleSearch}
               placeholder="Buscar escalas funcionales..."
             />
           </View>
@@ -115,8 +144,8 @@ export default function FunctionalScalesScreen() {
           {Object.entries(FUNCTIONAL_SCALES).map(([key, section]) => (
             <View key={key} style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Image
-                  source={{ uri: section.image }}
+                <ImageWithFallback
+                  uri={section.image}
                   style={styles.sectionImage}
                 />
                 <View style={styles.sectionOverlay}>

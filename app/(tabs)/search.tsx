@@ -1,12 +1,33 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput } from 'react-native';
+import React, { useState, useCallback, useMemo } from 'react';
+import { View, Text, StyleSheet, FlatList, Pressable, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Link } from 'expo-router';
+import { Link, useLocalSearchParams } from 'expo-router';
 import { Search as SearchIcon, SlidersHorizontal, X, ChevronRight } from 'lucide-react-native';
 import Animated, { FadeIn, FadeOut, Layout } from 'react-native-reanimated';
 
-// Temporary data - replace with API call
-const SCALES = [
+// Interfaces para mejorar el tipado
+interface Scale {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  imageUrl: string;
+  tags: string[];
+  popularity: number;
+}
+
+interface CategoryOption {
+  id: string;
+  name: string;
+}
+
+interface SortOption {
+  id: string;
+  name: string;
+}
+
+// Datos temporales - reemplazar con llamada a API
+const SCALES: Scale[] = [
   {
     id: 'barthel',
     name: 'Escala de Barthel',
@@ -36,7 +57,7 @@ const SCALES = [
   }
 ];
 
-const CATEGORIES = [
+const CATEGORIES: CategoryOption[] = [
   { id: 'all', name: 'All Scales' },
   { id: 'functional', name: 'Functional' },
   { id: 'cognitive', name: 'Cognitive' },
@@ -45,35 +66,112 @@ const CATEGORIES = [
   { id: 'neurological', name: 'Neurological' }
 ];
 
-const SORT_OPTIONS = [
+const SORT_OPTIONS: SortOption[] = [
   { id: 'alphabetical', name: 'A-Z' },
   { id: 'popularity', name: 'Most Popular' },
   { id: 'recent', name: 'Recently Updated' }
 ];
 
 export default function SearchScreen() {
-  const [searchQuery, setSearchQuery] = useState('');
+  // Obtener parámetros de la URL
+  const params = useLocalSearchParams();
+  const initialQuery = typeof params.q === 'string' ? params.q : '';
+  const initialFilter = params.filter === 'true';
+  
+  const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [sortBy, setSortBy] = useState('popularity');
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(initialFilter);
 
+  // Manejar cambios en la búsqueda
   const handleSearch = useCallback((text: string) => {
     setSearchQuery(text);
   }, []);
 
-  const filteredScales = SCALES.filter(scale => {
-    const matchesSearch = scale.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      scale.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      scale.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
-    
-    const matchesCategory = selectedCategory === 'all' || scale.category.toLowerCase() === selectedCategory.toLowerCase();
-    
-    return matchesSearch && matchesCategory;
-  }).sort((a, b) => {
-    if (sortBy === 'alphabetical') return a.name.localeCompare(b.name);
-    if (sortBy === 'popularity') return b.popularity - a.popularity;
-    return 0;
-  });
+  // Manejar cambios en la categoría
+  const handleCategoryChange = useCallback((categoryId: string) => {
+    setSelectedCategory(categoryId);
+  }, []);
+
+  // Manejar cambios en la ordenación
+  const handleSortChange = useCallback((sortId: string) => {
+    setSortBy(sortId);
+  }, []);
+
+  // Alternar mostrar/ocultar filtros
+  const toggleFilters = useCallback(() => {
+    setShowFilters(prev => !prev);
+  }, []);
+
+  // Borrar la consulta de búsqueda
+  const clearSearch = useCallback(() => {
+    setSearchQuery('');
+  }, []);
+
+  // Memoizar los resultados filtrados para evitar recálculos innecesarios
+  const filteredScales = useMemo(() => {
+    return SCALES.filter(scale => {
+      const matchesSearch = 
+        searchQuery === '' || 
+        scale.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        scale.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        scale.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+      
+      const matchesCategory = selectedCategory === 'all' || 
+        scale.category.toLowerCase() === selectedCategory.toLowerCase();
+      
+      return matchesSearch && matchesCategory;
+    }).sort((a, b) => {
+      if (sortBy === 'alphabetical') return a.name.localeCompare(b.name);
+      if (sortBy === 'popularity') return b.popularity - a.popularity;
+      // Para 'recent', podríamos usar una fecha de actualización si estuviera disponible
+      return 0;
+    });
+  }, [searchQuery, selectedCategory, sortBy]);
+
+  // Componente para renderizar cada escala
+  const renderScaleItem = useCallback(({ item }: { item: Scale }) => (
+    <Link href={`/scales/${item.id}`} asChild>
+      <Pressable 
+        style={styles.scaleCard}
+        accessible={true}
+        accessibilityLabel={`Escala ${item.name}`}
+        accessibilityHint={item.description}
+        accessibilityRole="button"
+      >
+        <View style={styles.imageContainer}>
+          <View style={styles.image} />
+        </View>
+        <View style={styles.cardContent}>
+          <Text style={styles.scaleName}>{item.name}</Text>
+          <Text style={styles.scaleDescription} numberOfLines={2}>
+            {item.description}
+          </Text>
+          <View style={styles.tags}>
+            {item.tags.slice(0, 2).map(tag => (
+              <View key={tag} style={styles.tag}>
+                <Text style={styles.tagText}>{tag}</Text>
+              </View>
+            ))}
+          </View>
+          <View style={styles.cardFooter}>
+            <Text style={styles.categoryText}>{item.category}</Text>
+            <ChevronRight size={16} color="#64748b" />
+          </View>
+        </View>
+      </Pressable>
+    </Link>
+  ), []);
+
+  // Componente para mostrar cuando no hay resultados
+  const EmptyResultsComponent = useCallback(() => (
+    <View style={styles.emptyContainer}>
+      <Text style={styles.emptyTitle}>No se encontraron resultados</Text>
+      <Text style={styles.emptyText}>
+        Intenta con otra búsqueda o cambia los filtros aplicados
+      </Text>
+    </View>
+  ), []);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -86,14 +184,27 @@ export default function SearchScreen() {
             value={searchQuery}
             onChangeText={handleSearch}
             placeholderTextColor="#94a3b8"
+            returnKeyType="search"
+            accessibilityLabel="Buscar escalas médicas"
+            accessibilityRole="search"
           />
           {searchQuery ? (
-            <Pressable onPress={() => setSearchQuery('')}>
+            <Pressable 
+              onPress={clearSearch}
+              accessibilityLabel="Borrar búsqueda"
+              accessibilityRole="button"
+            >
               <X size={20} color="#64748b" />
             </Pressable>
           ) : null}
         </View>
-        <Pressable style={styles.filterButton} onPress={() => setShowFilters(!showFilters)}>
+        <Pressable 
+          style={styles.filterButton} 
+          onPress={toggleFilters}
+          accessible={true}
+          accessibilityLabel={showFilters ? "Ocultar filtros" : "Mostrar filtros"}
+          accessibilityRole="button"
+        >
           <SlidersHorizontal size={20} color="#64748b" />
         </Pressable>
       </View>
@@ -106,27 +217,35 @@ export default function SearchScreen() {
           style={styles.filtersContainer}
         >
           <Text style={styles.filterTitle}>Categories</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
-            {CATEGORIES.map(category => (
+          <FlatList
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.categoryScroll}
+            data={CATEGORIES}
+            keyExtractor={item => item.id}
+            renderItem={({ item }) => (
               <Pressable
-                key={category.id}
                 style={[
                   styles.categoryChip,
-                  selectedCategory === category.id && styles.categoryChipSelected
+                  selectedCategory === item.id && styles.categoryChipSelected
                 ]}
-                onPress={() => setSelectedCategory(category.id)}
+                onPress={() => handleCategoryChange(item.id)}
+                accessible={true}
+                accessibilityLabel={`Categoría ${item.name}`}
+                accessibilityState={{ selected: selectedCategory === item.id }}
+                accessibilityRole="button"
               >
                 <Text
                   style={[
                     styles.categoryChipText,
-                    selectedCategory === category.id && styles.categoryChipTextSelected
+                    selectedCategory === item.id && styles.categoryChipTextSelected
                   ]}
                 >
-                  {category.name}
+                  {item.name}
                 </Text>
               </Pressable>
-            ))}
-          </ScrollView>
+            )}
+          />
 
           <Text style={styles.filterTitle}>Sort By</Text>
           <View style={styles.sortOptions}>
@@ -137,7 +256,11 @@ export default function SearchScreen() {
                   styles.sortChip,
                   sortBy === option.id && styles.sortChipSelected
                 ]}
-                onPress={() => setSortBy(option.id)}
+                onPress={() => handleSortChange(option.id)}
+                accessible={true}
+                accessibilityLabel={`Ordenar por ${option.name}`}
+                accessibilityState={{ selected: sortBy === option.id }}
+                accessibilityRole="button"
               >
                 <Text
                   style={[
@@ -153,36 +276,16 @@ export default function SearchScreen() {
         </Animated.View>
       )}
 
-      <ScrollView style={styles.content}>
-        <View style={styles.resultsGrid}>
-          {filteredScales.map(scale => (
-            <Link href={`/scales/${scale.id}`} asChild key={scale.id}>
-              <Pressable style={styles.scaleCard}>
-                <View style={styles.imageContainer}>
-                  <View style={styles.image} />
-                </View>
-                <View style={styles.cardContent}>
-                  <Text style={styles.scaleName}>{scale.name}</Text>
-                  <Text style={styles.scaleDescription} numberOfLines={2}>
-                    {scale.description}
-                  </Text>
-                  <View style={styles.tags}>
-                    {scale.tags.slice(0, 2).map(tag => (
-                      <View key={tag} style={styles.tag}>
-                        <Text style={styles.tagText}>{tag}</Text>
-                      </View>
-                    ))}
-                  </View>
-                  <View style={styles.cardFooter}>
-                    <Text style={styles.categoryText}>{scale.category}</Text>
-                    <ChevronRight size={16} color="#64748b" />
-                  </View>
-                </View>
-              </Pressable>
-            </Link>
-          ))}
-        </View>
-      </ScrollView>
+      <FlatList
+        data={filteredScales}
+        renderItem={renderScaleItem}
+        keyExtractor={item => item.id}
+        contentContainerStyle={styles.resultsGrid}
+        ListEmptyComponent={EmptyResultsComponent}
+        initialNumToRender={5}
+        maxToRenderPerBatch={3}
+        windowSize={5}
+      />
     </SafeAreaView>
   );
 }
@@ -215,6 +318,7 @@ const styles = StyleSheet.create({
     color: '#0f172a',
     marginLeft: 8,
     marginRight: 8,
+    height: '100%',
   },
   filterButton: {
     width: 48,
@@ -276,12 +380,10 @@ const styles = StyleSheet.create({
   sortChipTextSelected: {
     color: '#ffffff',
   },
-  content: {
-    flex: 1,
-  },
   resultsGrid: {
     padding: 16,
     gap: 16,
+    flexGrow: 1, // Asegurar que la lista ocupe todo el espacio disponible
   },
   scaleCard: {
     backgroundColor: '#ffffff',
@@ -343,5 +445,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#0891b2',
     fontWeight: '500',
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    height: 200,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#0f172a',
+    marginBottom: 8,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
   },
 });

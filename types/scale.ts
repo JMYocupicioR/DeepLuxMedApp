@@ -1,9 +1,20 @@
 export interface Scale {
   id: string;
   name: string;
+  acronym?: string;
   description: string;
-  instructions: string;
-  scoring: {
+  category: string;
+  tags?: string[];
+  timeToComplete?: string;
+  popularity?: number;
+  popular?: boolean;
+  imageUrl?: string;
+  specialty?: string;
+  bodySystem?: string;
+  lastUpdated?: string;
+  version?: string;
+  instructions?: string;
+  scoring?: {
     method: string;
     ranges: Array<{
       min: number;
@@ -11,15 +22,11 @@ export interface Scale {
       interpretation: string;
     }>;
   };
-  references: Array<{
+  references?: Array<{
     title: string;
     authors: string[];
     year: number;
     doi?: string;
   }>;
-  categories: string[];
-  specialty: string;
-  bodySystem: string;
-  lastUpdated: string;
-  version: string;
+  crossReferences?: string[];
 }
