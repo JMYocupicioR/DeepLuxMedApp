@@ -1,8 +1,21 @@
 import React, { useCallback, useMemo, useRef, memo } from 'react';
-import { View, Text, StyleSheet, Pressable, useWindowDimensions, Platform, FlatList } from 'react-native';
-import { BottomSheetModal, BottomSheetScrollView, BottomSheetFlatList } from '@gorhom/bottom-sheet';
+import { View, Text, StyleSheet, Pressable, useWindowDimensions, Platform, SectionList } from 'react-native';
+import { BottomSheetModal, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { router } from 'expo-router';
-import { X, ChevronRight, ListStart, Brain, Activity, Heart, Stethoscope, Baby } from 'lucide-react-native';
+import { 
+  X, 
+  ChevronRight, 
+  ListStart, 
+  Brain, 
+  Activity, 
+  Heart, 
+  Stethoscope, 
+  Baby,
+  Minimize2,
+  PersonStanding as UserStanding,
+  Bone,
+  FileSearch 
+} from 'lucide-react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 
 interface MenuProps {
@@ -10,7 +23,7 @@ interface MenuProps {
   onClose: () => void;
 }
 
-interface Category {
+interface MenuItem {
   id: string;
   title: string;
   description: string;
@@ -19,101 +32,230 @@ interface Category {
   color: string;
 }
 
-const CATEGORIES: Category[] = [
+interface MenuSection {
+  title: string;
+  data: MenuItem[];
+}
+
+const MENU_SECTIONS: MenuSection[] = [
   {
-    id: 'alphabetical',
-    title: 'Escalas por Nombre',
-    description: 'Listado completo ordenado alfabéticamente',
-    route: '/scales/alfabetico',
-    icon: ListStart,
-    color: '#0891b2'
+    title: "Organización Principal",
+    data: [
+      {
+        id: 'alphabetical',
+        title: 'Escalas por Nombre',
+        description: 'Listado completo ordenado alfabéticamente (A-Z)',
+        route: '/scales/alfabetico',
+        icon: ListStart,
+        color: '#0891b2'
+      }
+    ]
   },
   {
-    id: 'functional',
-    title: 'Escalas Funcionales',
-    description: 'Evaluación de capacidades y actividades diarias',
-    route: '/scales/funcional',
-    icon: Activity,
-    color: '#0d9488'
+    title: "Por Función",
+    data: [
+      {
+        id: 'functional',
+        title: 'Funcionalidad',
+        description: 'Evaluación de capacidades y actividades diarias',
+        route: '/scales/funcional',
+        icon: Activity,
+        color: '#0d9488'
+      },
+      {
+        id: 'independence',
+        title: 'Independencia',
+        description: 'Medición del grado de autonomía del paciente',
+        route: '/scales/function/independence',
+        icon: UserStanding,
+        color: '#8b5cf6'
+      },
+      {
+        id: 'cognitive',
+        title: 'Capacidad Cognitiva',
+        description: 'Evaluación de funciones mentales y comportamiento',
+        route: '/scales/function/cognitive',
+        icon: Brain,
+        color: '#6366f1'
+      },
+      {
+        id: 'pain',
+        title: 'Evaluación del Dolor',
+        description: 'Cuantificación de intensidad y características del dolor',
+        route: '/scales/function/pain',
+        icon: Minimize2,
+        color: '#ef4444'
+      },
+      {
+        id: 'balance',
+        title: 'Equilibrio y Movilidad',
+        description: 'Valoración de estabilidad, coordinación y desplazamiento',
+        route: '/scales/function/balance',
+        icon: UserStanding,
+        color: '#f59e0b'
+      }
+    ]
   },
   {
-    id: 'cognitive',
-    title: 'Escalas Cognitivas',
-    description: 'Evaluación de funciones mentales y comportamiento',
-    route: '/scales/cognitive',
-    icon: Brain,
-    color: '#6366f1'
+    title: "Por Especialidad Médica",
+    data: [
+      {
+        id: 'rehabilitation',
+        title: 'Rehabilitación',
+        description: 'Escalas enfocadas en medicina física y rehabilitación',
+        route: '/scales/especialidad?esp=rehabilitacion',
+        icon: Activity,
+        color: '#0d9488'
+      },
+      {
+        id: 'pediatric',
+        title: 'Pediatría',
+        description: 'Evaluaciones específicas para población infantil',
+        route: '/scales/especialidad?esp=pediatria',
+        icon: Baby,
+        color: '#f59e0b'
+      },
+      {
+        id: 'neurology',
+        title: 'Neurología',
+        description: 'Escalas para evaluación neurológica',
+        route: '/scales/especialidad?esp=neurologia',
+        icon: Brain,
+        color: '#8b5cf6'
+      },
+      {
+        id: 'pneumology',
+        title: 'Neumología',
+        description: 'Evaluación de función y capacidad pulmonar',
+        route: '/scales/especialidad?esp=neumologia',
+        icon: Stethoscope,
+        color: '#0891b2'
+      },
+      {
+        id: 'geriatrics',
+        title: 'Geriatría',
+        description: 'Escalas específicas para adultos mayores',
+        route: '/scales/especialidad?esp=geriatria',
+        icon: UserStanding,
+        color: '#64748b'
+      },
+      {
+        id: 'cardiology',
+        title: 'Cardiología',
+        description: 'Evaluación de riesgo y función cardíaca',
+        route: '/scales/especialidad?esp=cardiologia',
+        icon: Heart,
+        color: '#ec4899'
+      }
+    ]
   },
   {
-    id: 'cardiovascular',
-    title: 'Escalas Cardiovasculares',
-    description: 'Evaluación de riesgo y función cardíaca',
-    route: '/scales/cardiovascular',
-    icon: Heart,
-    color: '#ec4899'
-  },
-  {
-    id: 'respiratory',
-    title: 'Escalas Respiratorias',
-    description: 'Evaluación de función y capacidad pulmonar',
-    route: '/scales/respiratory',
-    icon: Stethoscope,
-    color: '#8b5cf6'
-  },
-  {
-    id: 'pediatric',
-    title: 'Escalas Pediátricas',
-    description: 'Evaluaciones específicas para población infantil',
-    route: '/scales/pediatric',
-    icon: Baby,
-    color: '#f59e0b'
+    title: "Por Segmento Corporal",
+    data: [
+      {
+        id: 'head',
+        title: 'Cabeza',
+        description: 'Evaluaciones específicas para cabeza y cuello',
+        route: '/scales/segmento?part=cabeza',
+        icon: FileSearch,
+        color: '#8b5cf6'
+      },
+      {
+        id: 'spine',
+        title: 'Columna',
+        description: 'Escalas para valoración de columna vertebral',
+        route: '/scales/segmento?part=columna',
+        icon: Bone,
+        color: '#0d9488'
+      },
+      {
+        id: 'shoulder',
+        title: 'Hombros',
+        description: 'Evaluación funcional de hombros',
+        route: '/scales/segmento?part=hombros',
+        icon: FileSearch,
+        color: '#f59e0b'
+      },
+      {
+        id: 'hip',
+        title: 'Caderas',
+        description: 'Escalas para valoración de cadera',
+        route: '/scales/segmento?part=caderas',
+        icon: FileSearch,
+        color: '#0891b2'
+      },
+      {
+        id: 'knee',
+        title: 'Rodillas',
+        description: 'Evaluación funcional de rodilla',
+        route: '/scales/segmento?part=rodillas',
+        icon: FileSearch,
+        color: '#ef4444'
+      },
+      {
+        id: 'foot',
+        title: 'Tobillos y Pie',
+        description: 'Valoración de tobillo y pie',
+        route: '/scales/segmento?part=pie',
+        icon: FileSearch,
+        color: '#64748b'
+      }
+    ]
   }
 ];
 
-// Componente memoizado para cada elemento de categoría
-const CategoryItem = memo(({ category, index, onPress }: { 
-  category: Category; 
+const MenuItem = memo(({ item, index, onPress }: { 
+  item: MenuItem; 
   index: number; 
   onPress: (route: string) => void;
 }) => (
   <Animated.View
-    key={category.id}
-    entering={FadeInDown.delay(index * 100)}
-    style={styles.categoryContainer}
+    entering={FadeInDown.delay(index * 50)}
+    style={styles.menuItemContainer}
   >
-    <Pressable
-      style={styles.categoryButton}
-      onPress={() => onPress(category.route)}
-      accessible={true}
-      accessibilityLabel={category.title}
-      accessibilityHint={category.description}
-      accessibilityRole="button"
+    <View
+      style={styles.menuItemButton}
+      onClick={() => Platform.OS === 'web' ? onPress(item.route) : null}
     >
-      <View style={[styles.iconContainer, { backgroundColor: `${category.color}20` }]}>
-        <category.icon size={24} color={category.color} />
-      </View>
-      <View style={styles.categoryInfo}>
-        <Text style={styles.categoryTitle}>{category.title}</Text>
-        <Text style={styles.categoryDescription}>{category.description}</Text>
-      </View>
-      <ChevronRight size={20} color="#64748b" />
-    </Pressable>
+      <Pressable
+        onPress={() => onPress(item.route)}
+        accessible={true}
+        accessibilityLabel={item.title}
+        accessibilityHint={item.description}
+        accessibilityRole="button"
+        style={{flex: 1, flexDirection: 'row', alignItems: 'center'}}
+      >
+        <View style={[styles.iconContainer, { backgroundColor: `${item.color}20` }]}>
+          <item.icon size={24} color={item.color} />
+        </View>
+        <View style={styles.menuItemInfo}>
+          <Text style={styles.menuItemTitle}>{item.title}</Text>
+          <Text style={styles.menuItemDescription} numberOfLines={1}>{item.description}</Text>
+        </View>
+        <ChevronRight size={20} color="#64748b" />
+      </Pressable>
+    </View>
   </Animated.View>
 ));
 
-CategoryItem.displayName = 'CategoryItem';
+MenuItem.displayName = 'MenuItem';
+
+const SectionHeader = memo(({ title }: { title: string }) => (
+  <Text style={styles.sectionHeader}>{title}</Text>
+));
+
+SectionHeader.displayName = 'SectionHeader';
 
 export function Menu({ visible, onClose }: MenuProps) {
   const { height } = useWindowDimensions();
   const bottomSheetRef = useRef<BottomSheetModal>(null);
-  const snapPoints = useMemo(() => ['60%', '85%'], []);
+  const snapPoints = useMemo(() => ['70%', '90%'], []);
 
-  const handleCategoryPress = useCallback((route: string) => {
+  const handleMenuItemPress = useCallback((route: string) => {
     onClose();
     router.push(route);
   }, [onClose]);
 
-  // Efecto para presentar/descartar el bottomSheet
   React.useEffect(() => {
     if (Platform.OS !== 'web' && visible) {
       bottomSheetRef.current?.present();
@@ -122,14 +264,6 @@ export function Menu({ visible, onClose }: MenuProps) {
     }
   }, [visible]);
 
-  // Renderizador optimizado para FlatList
-  const renderItem = useCallback(({ item, index }: { item: Category; index: number }) => (
-    <CategoryItem category={item} index={index} onPress={handleCategoryPress} />
-  ), [handleCategoryPress]);
-
-  const keyExtractor = useCallback((item: Category) => item.id, []);
-
-  // Renderizado para web
   if (Platform.OS === 'web') {
     if (!visible) return null;
 
@@ -149,18 +283,23 @@ export function Menu({ visible, onClose }: MenuProps) {
             </Pressable>
           </View>
 
-          <FlatList
-            data={CATEGORIES}
-            renderItem={renderItem}
-            keyExtractor={keyExtractor}
-            contentContainerStyle={styles.content}
+          <SectionList
+            sections={MENU_SECTIONS}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item, index }) => (
+              <MenuItem item={item} index={index} onPress={handleMenuItemPress} />
+            )}
+            renderSectionHeader={({ section: { title } }) => (
+              <SectionHeader title={title} />
+            )}
+            stickySectionHeadersEnabled={true}
+            contentContainerStyle={styles.sectionListContent}
           />
         </View>
       </View>
     );
   }
 
-  // Renderizado para dispositivos móviles
   return (
     <BottomSheetModal
       ref={bottomSheetRef}
@@ -183,12 +322,21 @@ export function Menu({ visible, onClose }: MenuProps) {
         </Pressable>
       </View>
 
-      <BottomSheetFlatList
-        data={CATEGORIES}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
-        contentContainerStyle={styles.content}
-      />
+      <BottomSheetScrollView contentContainerStyle={styles.sectionListContent}>
+        {MENU_SECTIONS.map((section, sectionIndex) => (
+          <React.Fragment key={`section-${sectionIndex}`}>
+            <SectionHeader title={section.title} />
+            {section.data.map((item, itemIndex) => (
+              <MenuItem 
+                key={item.id} 
+                item={item} 
+                index={itemIndex} 
+                onPress={handleMenuItemPress} 
+              />
+            ))}
+          </React.Fragment>
+        ))}
+      </BottomSheetScrollView>
     </BottomSheetModal>
   );
 }
@@ -236,6 +384,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
+    backgroundColor: '#ffffff',
   },
   title: {
     fontSize: 20,
@@ -247,48 +396,61 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: '#f1f5f9',
   },
-  content: {
-    padding: 20,
+  sectionHeader: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: '#f8fafc',
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748b',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
   },
-  categoryContainer: {
-    marginBottom: 16,
+  sectionListContent: {
+    paddingBottom: 40,
   },
-  categoryButton: {
+  menuItemContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+  },
+  menuItemButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    padding: 12,
     backgroundColor: '#ffffff',
-    borderRadius: 16,
+    borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 1,
     },
     shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowRadius: 3,
+    elevation: 1,
   },
   iconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: 14,
   },
-  categoryInfo: {
+  menuItemInfo: {
     flex: 1,
-    marginRight: 12,
+    marginRight: 8,
   },
-  categoryTitle: {
-    fontSize: 16,
+  menuItemTitle: {
+    fontSize: 15,
     fontWeight: '600',
     color: '#0f172a',
-    marginBottom: 4,
+    marginBottom: 2,
   },
-  categoryDescription: {
-    fontSize: 14,
+  menuItemDescription: {
+    fontSize: 13,
     color: '#64748b',
-    lineHeight: 20,
+    lineHeight: 18,
   },
 });
