@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import { useState } from 'react';
 import { Globe as Globe2, Moon, Bell, Clock, Ruler, ChevronRight, Info, FileText, Shield, MessageSquareText, CircleHelp as HelpCircle } from 'lucide-react-native';
 
@@ -30,6 +30,10 @@ export default function SettingsScreen() {
     </TouchableOpacity>
   );
 
+  const navigateToSubpage = (page) => {
+    router.push(`/settings/${page}`);
+  };
+
   return (
     <>
       <Stack.Screen
@@ -47,7 +51,7 @@ export default function SettingsScreen() {
                 icon={Globe2}
                 title="Idioma"
                 value="Español"
-                onPress={() => {}}
+                onPress={() => navigateToSubpage('language')}
               />
               <SettingItem
                 icon={Moon}
@@ -84,7 +88,7 @@ export default function SettingsScreen() {
               <SettingItem
                 icon={Bell}
                 title="Tipos de Alertas"
-                onPress={() => {}}
+                onPress={() => navigateToSubpage('notifications')}
               />
               <SettingItem
                 icon={Clock}
@@ -112,17 +116,17 @@ export default function SettingsScreen() {
               <SettingItem
                 icon={Shield}
                 title="Política de Privacidad"
-                onPress={() => {}}
+                onPress={() => navigateToSubpage('privacy')}
               />
               <SettingItem
                 icon={FileText}
                 title="Términos y Condiciones"
-                onPress={() => {}}
+                onPress={() => navigateToSubpage('terms')}
               />
               <SettingItem
                 icon={MessageSquareText}
                 title="Contacto de Soporte"
-                onPress={() => {}}
+                onPress={() => navigateToSubpage('support')}
               />
               <SettingItem
                 icon={HelpCircle}
@@ -217,4 +221,32 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#94a3b8',
   },
+  // Estilos para modo oscuro (para futura implementación)
+  containerDark: {
+    backgroundColor: '#0f172a',
+  },
+  sectionTitleDark: {
+    color: '#94a3b8',
+  },
+  sectionContentDark: {
+    backgroundColor: '#1e293b',
+  },
+  settingItemDark: {
+    borderBottomColor: '#334155',
+  },
+  settingIconDark: {
+    backgroundColor: '#0f172a',
+  },
+  settingTitleDark: {
+    color: '#f8fafc',
+  },
+  settingValueDark: {
+    color: '#94a3b8',
+  },
+  footerTextDark: {
+    color: '#94a3b8',
+  },
+  footerVersionDark: {
+    color: '#64748b',
+  }
 });
